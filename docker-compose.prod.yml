@@ -1,0 +1,21 @@
+services:
+  backend:
+    image: __IMAGE_PREFIX__/backend:latest
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    environment:
+      - DATABASE_PATH=/data/app.db
+
+  frontend:
+    image: __IMAGE_PREFIX__/frontend:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - ORIGIN=http://localhost:3000
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
