@@ -1,0 +1,19 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    environment:
+      - DATABASE_PATH=/data/app.db
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - ORIGIN=http://localhost:3000
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend

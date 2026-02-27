@@ -1,0 +1,30 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+      - ./backend/app:/app/app
+    environment:
+      - DATABASE_PATH=/data/app.db
+    command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/static:/app/static
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/svelte.config.js:/app/svelte.config.js
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      - ./frontend/src/app.html:/app/src/app.html
+      - ./frontend/src/app.css:/app/src/app.css
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
