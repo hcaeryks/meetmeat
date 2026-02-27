@@ -10,7 +10,11 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
-FROM node:20-alpine
+FROM alpine:3
+
+RUN apk add --no-cache libstdc++ libgcc
+
+COPY --from=oven/bun:alpine /usr/local/bin/bun /usr/local/bin/bun
 
 WORKDIR /app
 
@@ -20,4 +24,4 @@ COPY --from=builder /app/package.json ./
 ENV PORT=3000
 EXPOSE 3000
 
-CMD ["node", "build"]
+CMD ["bun", "build/index.js"]
