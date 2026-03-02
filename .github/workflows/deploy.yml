@@ -87,8 +87,8 @@ jobs:
           $SSH "$VM_USER@$VM_HOST" << EOF
             set -euo pipefail
 
-            # Ensure Docker Compose v2 plugin exists (Debian/Ubuntu)
-            if ! docker compose version >/dev/null 2>&1; then
+            # Ensure docker-compose v2 plugin exists (Debian/Ubuntu)
+            if ! docker-compose version >/dev/null 2>&1; then
               sudo apt-get update -y
               sudo apt-get install -y docker-compose-plugin
             fi
@@ -96,8 +96,8 @@ jobs:
             echo "$GHCR_TOKEN" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
 
             cd ~/meetmeat
-            docker compose pull
-            docker compose up -d
+            docker-compose pull
+            docker-compose up -d
             docker image prune -f
           EOF
 
