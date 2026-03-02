@@ -1,0 +1,105 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository }}
+
+jobs:
+  build-backend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}/backend:latest
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}/frontend:latest
+
+  deploy:
+    needs: [build-backend, build-frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare compose file
+        run: |
+          sed "s|__IMAGE_PREFIX__|${{ env.IMAGE_PREFIX }}|g" \
+            docker-compose.prod.yml > docker-compose.deploy.yml
+
+      - name: Deploy to VM
+        env:
+          SSH_KEY: ${{ secrets.GCP_SSH_KEY }}
+          VM_HOST: ${{ secrets.GCP_VM_HOST }}
+          VM_USER: ${{ secrets.GCP_VM_USER }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          ssh "$VM_USER@$VM_HOST" "mkdir -p ~/meetmeat/data"
+          scp docker-compose.deploy.yml "$VM_USER@$VM_HOST:~/meetmeat/docker-compose.yml"
+
+          ssh "$VM_USER@$VM_HOST" << EOF
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            cd ~/meetmeat
+            docker compose pull
+            docker compose up -d
+            docker image prune -f
+          EOF
+
+  # This will allow minimal registry usage, by only keeping current image in there.
+  cleanup:
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/delete-package-versions@v5
+        with:
+          package-name: meetmeat/backend
+          package-type: container
+          min-versions-to-keep: 1
+          delete-only-untagged-versions: true
+
+      - uses: actions/delete-package-versions@v5
+        with:
+          package-name: meetmeat/frontend
+          package-type: container
+          min-versions-to-keep: 1
+          delete-only-untagged-versions: true
