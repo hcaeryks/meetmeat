@@ -53,6 +53,9 @@ jobs:
   deploy:
     needs: [build-backend, build-frontend]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
@@ -68,23 +71,36 @@ jobs:
           VM_USER: ${{ secrets.GCP_VM_USER }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+
           mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
-          ssh "$VM_USER@$VM_HOST" "mkdir -p ~/meetmeat/data"
-          scp docker-compose.deploy.yml "$VM_USER@$VM_HOST:~/meetmeat/docker-compose.yml"
+          SSH="ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes"
+          SCP="scp -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes"
 
-          ssh "$VM_USER@$VM_HOST" << EOF
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          $SSH "$VM_USER@$VM_HOST" "mkdir -p ~/meetmeat/data ~/meetmeat"
+          $SCP docker-compose.deploy.yml "$VM_USER@$VM_HOST:~/meetmeat/docker-compose.yml"
+
+          $SSH "$VM_USER@$VM_HOST" << EOF
+            set -euo pipefail
+
+            # Ensure Docker Compose v2 plugin exists (Debian/Ubuntu)
+            if ! docker compose version >/dev/null 2>&1; then
+              sudo apt-get update -y
+              sudo apt-get install -y docker-compose-plugin
+            fi
+
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+
             cd ~/meetmeat
             docker compose pull
             docker compose up -d
             docker image prune -f
           EOF
 
-  # This will allow minimal registry usage, by only keeping current image in there.
   cleanup:
     needs: deploy
     runs-on: ubuntu-latest
